@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nazim Mohammed | 3D Artist & Interior Designer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Playfair Display for Elegance, Outfit for clean readability -->
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- GSAP for Animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        serif: ['Playfair Display', 'serif'],
+                    },
+                    colors: {
+                        primary: 'var(--color-primary)', 
+                        secondary: 'var(--color-secondary)',
+                        accent: 'var(--color-accent)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            /* Variables will be updated by JS */
+            --color-primary: #0d9488;    /* Teal 600 */
+            --color-secondary: #e11d48;  /* Rose 600 */
+            --bg-gradient-start: #0f766e;
+            --bg-gradient-end: #042f2e;
+        }
+
+        body {
+            /* Default background is a rich gradient, not black */
+            background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
+            background-attachment: fixed; /* Keeps gradient fixed while scrolling */
+            color: #ffffff;
+            overflow-x: hidden;
+            transition: background 1s ease; /* We will handle gradient transition via JS/overlay */
+            cursor: none;
+        }
+
+        /* Cinematic Grain */
+        .noise-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 50; opacity: 0.04;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        /* Custom Cursor */
+        .cursor-dot {
+            width: 8px; height: 8px; background-color: white;
+            position: fixed; top: 0; left: 0; border-radius: 50%;
+            z-index: 10000; pointer-events: none; mix-blend-mode: difference;
+        }
+        .cursor-outline {
+            width: 40px; height: 40px; border: 1px solid rgba(255, 255, 255, 0.5);
+            position: fixed; top: 0; left: 0; border-radius: 50%;
+            z-index: 9999; pointer-events: none;
+            transform: translate(-50%, -50%);
+            transition: width 0.2s, height 0.2s, background-color 0.2s;
+        }
+        body.hovering .cursor-outline {
+            width: 60px; height: 60px;
+            background-color: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(2px);
+            border-color: transparent;
+        }
+
+        /* Smooth transitions */
+        *, *::before, *::after {
+            transition: border-color 0.5s ease, color 0.5s ease, background-color 0.5s ease, box-shadow 0.5s ease;
+        }
+
+        /* Custom Scrollbar - Elegant & Thin */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.3);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--color-primary);
+        }
+
+        /* Loader */
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #111; /* Keep loader dark for contrast */
+            z-index: 10001;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .loader-content h1 {
+            font-family: 'Playfair Display', serif;
+            font-style: italic;
+        }
+
+        /* ThreeJS Canvas */
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            pointer-events: none;
+            mix-blend-mode: screen; /* Helps particles blend with colored backgrounds */
+        }
+
+        /* Elegant Filter Buttons */
+        .filter-btn {
+            backdrop-filter: blur(12px);
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            letter-spacing: 0.05em;
+        }
+        .filter-btn:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+        }
+        .filter-btn.active {
+            background: #fff;
+            color: #000 !important; /* Force black text on active white button */
+            border-color: #fff;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        /* Glassmorphic Cards */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.07);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+            transform-style: preserve-3d;
+            perspective: 1000px;
+        }
+        .glass-card:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Typography Override */
+        h1, h2, h3 {
+            font-family: 'Playfair Display', serif;
+        }
+        
+        /* Gradient Background Layer for smooth transitions */
+        #bg-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+            transition: opacity 1s ease;
+            background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
+        }
+
+        /* Infinite Marquee */
+        .marquee-container {
+            overflow: hidden;
+            white-space: nowrap;
+            mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+        }
+        .marquee-content {
+            display: inline-block;
+            animation: scroll 30s linear infinite;
+        }
+        @keyframes scroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        /* --- NEW: Image Viewer Modal Styles --- */
+        #media-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 10000;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            cursor: auto;
+        }
+        
+        #media-modal.open {
+            display: flex;
+            opacity: 1;
+        }
+
+        /* Wrapper fits the content exactly */
+        .modal-content-wrapper {
+            position: relative;
+            width: auto;
+            height: auto;
+            max-width: 95vw;
+            max-height: 85vh;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+            border: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            z-index: 10001;
+            transition: color 0.3s;
+        }
+        .modal-close:hover {
+            color: var(--color-primary);
+        }
+
+        .modal-caption {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: white;
+            pointer-events: none;
+            z-index: 10001;
+        }
+        
+        .modal-caption h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+        
+        .modal-caption p {
+            font-family: 'Outfit', sans-serif;
+            opacity: 0.9;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+
+        /* Archive Masonry Item */
+        .archive-item {
+            break-inside: avoid;
+            margin-bottom: 1.5rem;
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.3s ease;
+        }
+        .archive-item:hover {
+            transform: translateY(-5px);
+            z-index: 10;
+        }
+        .archive-overlay {
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .archive-item:hover .archive-overlay {
+            opacity: 1;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="noise-overlay"></div>
+    <div class="cursor-dot"></div>
+    <div class="cursor-outline"></div>
+    <div id="bg-layer"></div>
+
+    <!-- Media Modal -->
+    <div id="media-modal">
+        <button class="modal-close" onclick="closeModal()">
+            <i class="fas fa-times"></i>
+        </button>
+        <!-- Wrapper is mostly unstyled container for the image -->
+        <div class="modal-content-wrapper" id="modal-container">
+            <!-- Content injected via JS -->
+        </div>
+        <div class="modal-caption">
+            <h3 id="modal-title">Project Title</h3>
+            <p id="modal-desc">Description</p>
+        </div>
+    </div>
+
+    <!-- Loading Screen -->
+    <div id="loader">
+        <div class="loader-content text-center">
+            <h1 class="text-6xl md:text-8xl font-serif text-white mb-4 italic opacity-0 animate-[fadeIn_1s_ease_forwards]">NM</h1>
+            <div class="w-32 h-[1px] bg-white/30 mx-auto overflow-hidden">
+                <div class="h-full bg-white w-0 animate-[load_1.5s_ease-in-out_forwards]"></div>
+            </div>
+            <p class="mt-4 font-sans text-xs tracking-[0.4em] uppercase text-gray-500 opacity-0 animate-[fadeIn_1s_ease_0.8s_forwards]">Loading Portfolio</p>
+        </div>
+    </div>
+
+    <!-- 3D Background -->
+    <div id="canvas-container"></div>
+
+    <!-- Navigation -->
+    <nav class="fixed w-full z-50 top-0 transition-all duration-300 border-b border-white/5 bg-black/5 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
+            <a href="#" class="text-2xl font-serif italic font-bold text-white tracking-wide group hover-trigger magnetic" data-strength="20">
+                Nazim Mohammed<span class="text-primary group-hover:text-white transition-colors">.Design</span>
+            </a>
+            
+            <div class="hidden md:flex space-x-10 items-center">
+                <a href="#home" class="nav-link text-white/80 hover:text-white transition-colors text-sm font-sans tracking-widest uppercase hover-trigger magnetic" data-strength="10">Home</a>
+                <a href="#about" class="nav-link text-white/80 hover:text-white transition-colors text-sm font-sans tracking-widest uppercase hover-trigger magnetic" data-strength="10">About</a>
+                <a href="#portfolio" class="nav-link text-white/80 hover:text-white transition-colors text-sm font-sans tracking-widest uppercase hover-trigger magnetic" data-strength="10">Work</a>
+                <a href="#archive" class="nav-link text-white/80 hover:text-white transition-colors text-sm font-sans tracking-widest uppercase hover-trigger magnetic" data-strength="10">Archive</a>
+                <a href="#contact" class="px-6 py-2 border border-white/20 rounded-full hover:bg-white hover:text-black transition-all duration-300 text-xs font-bold tracking-widest uppercase hover-trigger magnetic" data-strength="30">Contact</a>
+                <a href="resume.pdf" download="Nazim_Mohammed_Resume" class="text-white/60 hover:text-primary transition-colors hover-trigger magnetic" data-strength="15" title="Download Resume"><i class="fas fa-file-alt text-lg"></i></a>
+            </div>
+
+            <button class="md:hidden text-white text-2xl hover-trigger" id="mobile-menu-btn">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+        <div class="md:hidden hidden bg-black/95 absolute w-full border-b border-gray-800" id="mobile-menu">
+            <div class="flex flex-col p-8 space-y-6 text-center">
+                <a href="#home" class="text-white text-xl font-serif">Home</a>
+                <a href="#portfolio" class="text-white text-xl font-serif">Work</a>
+                <a href="#archive" class="text-white text-xl font-serif">Archive</a>
+                <a href="#contact" class="text-white text-xl font-serif">Contact</a>
+                <a href="resume.pdf" download="Nazim_Mohammed_Resume" class="text-primary text-lg font-serif">Download CV</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="min-h-screen flex items-center relative pt-20">
+        <div class="max-w-7xl mx-auto px-6 relative z-10 grid md:grid-cols-2 gap-16 items-center w-full">
+            <div class="order-2 md:order-1">
+                <div class="mb-6 flex items-center gap-4">
+                    <div class="h-[1px] w-12 bg-primary"></div>
+                    <span class="text-primary font-sans font-bold tracking-[0.3em] uppercase text-xs reveal-text"><span>Riyadh Based Designer</span></span>
+                </div>
+                
+                <h1 class="text-7xl md:text-8xl lg:text-9xl font-serif font-bold mb-8 leading-[0.9] text-white">
+                    <span class="reveal-text"><span>Visual</span></span>
+                    <span class="reveal-text"><span class="italic text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">Poetry</span></span>
+                </h1>
+                
+                <div class="mb-12">
+                    <p class="text-white/70 text-xl font-light max-w-lg leading-relaxed reveal-text" style="transition-delay: 0.2s;">
+                        <span>I bridge the gap between imagination and reality through photorealistic 3D rendering and immersive digital experiences.</span>
+                    </p>
+                </div>
+                
+                <!-- Color/Theme Filters -->
+                <div class="reveal-text" style="transition-delay: 0.4s;">
+                    <span class="block">
+                        <p class="text-xs font-bold uppercase tracking-widest mb-4 text-white/50">Select Atmosphere</p>
+                        <div class="flex flex-wrap gap-4">
+                            <button onclick="updateTheme('all', true)" class="filter-btn active px-6 py-3 rounded-full text-white text-xs font-bold uppercase tracking-wider hover-trigger magnetic" data-filter="all">The Atelier</button>
+                            <button onclick="updateTheme('interior', true)" class="filter-btn px-6 py-3 rounded-full text-white text-xs font-bold uppercase tracking-wider hover-trigger magnetic" data-filter="interior">Interior</button>
+                            <button onclick="updateTheme('model', true)" class="filter-btn px-6 py-3 rounded-full text-white text-xs font-bold uppercase tracking-wider hover-trigger magnetic" data-filter="model">Modeling</button>
+                            <button onclick="updateTheme('animation', true)" class="filter-btn px-6 py-3 rounded-full text-white text-xs font-bold uppercase tracking-wider hover-trigger magnetic" data-filter="animation">Motion</button>
+                        </div>
+                    </span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Scroll Indicator -->
+        <div class="absolute bottom-10 left-1/2 transform -translate-x-1/2 flex flex-col items-center opacity-60">
+            <div class="w-[1px] h-16 bg-white mb-2"></div>
+            <span class="text-[10px] uppercase tracking-[0.3em] font-sans text-white">Scroll</span>
+        </div>
+    </section>
+
+    <!-- Infinite Tool Marquee -->
+    <div class="py-8 border-y border-white/5 bg-black/10 backdrop-blur-sm relative z-20">
+        <div class="marquee-container">
+            <div class="marquee-content flex space-x-20 text-white/30 text-5xl font-serif italic tracking-wide">
+                <span>Blender</span><span>AutoCAD</span><span>GIMP</span><span>Canva</span><span>DaVinci Resolve</span><span>Three.js</span>
+                <span>Blender</span><span>AutoCAD</span><span>GIMP</span><span>Canva</span><span>DaVinci Resolve</span><span>Three.js</span>
+                <span>Blender</span><span>AutoCAD</span><span>GIMP</span><span>Canva</span><span>DaVinci Resolve</span><span>Three.js</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- About -->
+    <section id="about" class="py-20 relative">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="grid md:grid-cols-12 gap-16">
+                <div class="md:col-span-5">
+                    <h2 class="text-5xl md:text-6xl font-serif font-bold text-white mb-8 leading-tight">
+                        Crafting <br> <span class="text-primary italic">Digital</span> <br> Spaces
+                    </h2>
+                    <div class="w-20 h-1 bg-primary mb-8"></div>
+                    <p class="text-white/80 text-lg leading-relaxed mb-6 font-light">
+                        Combining technical expertise in AutoCAD & Blender with a keen eye for interior aesthetics. Based in Riyadh, serving clients globally.
+                    </p>
+                    
+                    <div class="mt-12 space-y-6 border-l border-white/10 pl-6">
+                        <div>
+                            <h4 class="text-white font-bold">BCA Computer Science</h4>
+                            <p class="text-white/50 text-sm">CMR University</p>
+                        </div>
+                        <div>
+                            <h4 class="text-white font-bold">Master Blender for Game Art</h4>
+                            <p class="text-white/50 text-sm">Udemy</p>
+                        </div>
+                        <div>
+                            <h4 class="text-white font-bold">Data Analytics Job Simulation</h4>
+                            <p class="text-white/50 text-sm">Deloitte Australia</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="md:col-span-7 grid sm:grid-cols-2 gap-6">
+                    <div class="glass-card p-10 rounded-2xl hover-trigger magnetic" data-strength="20">
+                        <i class="fas fa-couch text-4xl text-primary mb-6"></i>
+                        <h3 class="text-2xl font-serif text-white mb-2">Interior Vis</h3>
+                        <p class="text-white/60 text-sm">Photorealistic living spaces with advanced lighting.</p>
+                    </div>
+                    <div class="glass-card p-10 rounded-2xl hover-trigger magnetic" data-strength="20">
+                        <i class="fas fa-cube text-4xl text-secondary mb-6"></i>
+                        <h3 class="text-2xl font-serif text-white mb-2">Product Design</h3>
+                        <p class="text-white/60 text-sm">High-fidelity 3D assets for e-commerce.</p>
+                    </div>
+                    <div class="glass-card p-10 rounded-2xl hover-trigger magnetic" data-strength="20">
+                        <i class="fas fa-video text-4xl text-purple-400 mb-6"></i>
+                        <h3 class="text-2xl font-serif text-white mb-2">Motion</h3>
+                        <p class="text-white/60 text-sm">Kinetic typography and product animation.</p>
+                    </div>
+                    <div class="glass-card p-10 rounded-2xl hover-trigger magnetic" data-strength="20">
+                        <i class="fas fa-code text-4xl text-blue-400 mb-6"></i>
+                        <h3 class="text-2xl font-serif text-white mb-2">Web Dev</h3>
+                        <p class="text-white/60 text-sm">Responsive portfolios and landing pages.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Portfolio -->
+    <section id="portfolio" class="py-20 relative">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="mb-20 flex justify-between items-end">
+                <h2 class="text-5xl md:text-7xl font-serif font-bold text-white">
+                    Selected <span class="italic text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Works</span>
+                </h2>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-10" id="portfolio-grid">
+                
+                <!-- Item 1: Interior -->
+                <div class="glass-card group relative overflow-hidden h-[500px] rounded-[2rem] cursor-none hover-trigger tilt-card" data-category="interior" onclick="openModal('image', 'interior/bedroom.png', '2BHK Modern Layout', 'Minimalist urban living space.')">
+                    <img src="interior/bedroom.png" class="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-1000" onerror="this.src='https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80'">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-80"></div>
+                    <div class="absolute bottom-8 left-8">
+                        <span class="text-primary text-xs font-bold uppercase tracking-widest mb-2 block">Interior</span>
+                        <h3 class="text-3xl font-serif text-white">Modern Bedroom</h3>
+                    </div>
+                </div>
+                <!-- Item 2: Interior -->
+                <div class="glass-card group relative overflow-hidden h-[500px] rounded-[2rem] cursor-none hover-trigger tilt-card" data-category="interior" onclick="openModal('image', 'interior/livingroom.png', '2BHK Modern Layout', 'Minimalist urban living space.')">
+                    <img src="interior/livingroom.png" class="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-1000" onerror="this.src='https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80'">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-80"></div>
+                    <div class="absolute bottom-8 left-8">
+                        <span class="text-primary text-xs font-bold uppercase tracking-widest mb-2 block">Interior</span>
+                        <h3 class="text-3xl font-serif text-white">Modern Livingroom</h3>
+                    </div>
+                </div>
+                <!-- Item 3: Interior -->
+                <div class="glass-card group relative overflow-hidden h-[500px] rounded-[2rem] cursor-none hover-trigger tilt-card" data-category="interior" onclick="openModal('image', 'interior/2bhk.png', '2BHK Modern Layout', 'Minimalist urban living space.')">
+                    <img src="interior/2bhk.png" class="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-1000" onerror="this.src='https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80'">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-80"></div>
+                    <div class="absolute bottom-8 left-8">
+                        <span class="text-primary text-xs font-bold uppercase tracking-widest mb-2 block">Interior</span>
+                        <h3 class="text-3xl font-serif text-white">Modern Livingroom</h3>
+                    </div>
+                </div>                
+                <!-- Item 2: Animation -->
+                <div class="glass-card group relative overflow-hidden h-[500px] rounded-[2rem] cursor-none hover-trigger tilt-card" data-category="animation" onclick="openModal('video', 'animation/kara.mp4', 'Kara Cafe', 'Cinematic product reveal.')">
+                    <div class="absolute inset-0 flex items-center justify-center z-10">
+                        <div class="w-20 h-20 rounded-full border border-white/30 backdrop-blur-md flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <i class="fas fa-play text-3xl text-white ml-1"></i>
+                        </div>
+                    </div>
+                    <video src="animation/kara.mp4" class="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-1000" onerror="this.src='https://images.unsplash.com/photo-1550745165-9bc0b252726f?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80'">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-80"></div>
+                    <div class="absolute bottom-8 left-8">
+                        <span class="text-secondary text-xs font-bold uppercase tracking-widest mb-2 block">Animation</span>
+                        <h3 class="text-3xl font-serif text-white">Kara Cafe TVC</h3>
+                    </div>
+                </div>
+
+                <!-- Item 3: Modeling -->
+                <div class="glass-card group relative overflow-hidden h-[500px] rounded-[2rem] cursor-none hover-trigger tilt-card" data-category="model" onclick="openModal('image', 'modeling/autumn_day.png', 'Product Vis', 'High fidelity topology study.')">
+                    <img src="modeling/autumn_day.png" class="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-1000" onerror="this.src='https://images.unsplash.com/photo-1618220179428-22790b461013?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80'">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-80"></div>
+                    <div class="absolute bottom-8 left-8">
+                        <span class="text-blue-400 text-xs font-bold uppercase tracking-widest mb-2 block">Modeling</span>
+                        <h3 class="text-3xl font-serif text-white">Product Vis</h3>
+                    </div>
+                </div>
+
+                <!-- Item 3: Modeling -->
+                <div class="glass-card group relative overflow-hidden h-[500px] rounded-[2rem] cursor-none hover-trigger tilt-card" data-category="model" onclick="openModal('image', 'modeling/dustbin.png', 'Product Vis', 'High fidelity topology study.')">
+                    <img src="modeling/dustbin.png" class="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-1000" onerror="this.src='https://images.unsplash.com/photo-1618220179428-22790b461013?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80'">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-80"></div>
+                    <div class="absolute bottom-8 left-8">
+                        <span class="text-blue-400 text-xs font-bold uppercase tracking-widest mb-2 block">Modeling</span>
+                        <h3 class="text-3xl font-serif text-white">Product Vis</h3>
+                    </div>
+                </div>  
+                <!-- Item 3: Modeling -->
+                <div class="glass-card group relative overflow-hidden h-[500px] rounded-[2rem] cursor-none hover-trigger tilt-card" data-category="model" onclick="openModal('image', 'modeling/infy_logo.png', 'Product Vis', 'High fidelity topology study.')">
+                    <img src="modeling/infy_logo.png" class="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-1000" onerror="this.src='https://images.unsplash.com/photo-1618220179428-22790b461013?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80'">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-80"></div>
+                    <div class="absolute bottom-8 left-8">
+                        <span class="text-blue-400 text-xs font-bold uppercase tracking-widest mb-2 block">Modeling</span>
+                        <h3 class="text-3xl font-serif text-white">Product Vis</h3>
+                    </div>
+                </div>               
+            </div>
+        </div>
+    </section>
+
+    <!-- Archive -->
+    <section id="archive" class="py-20 relative bg-black/5 backdrop-blur-sm border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="mb-12 flex justify-between items-end">
+                <h2 class="text-4xl md:text-5xl font-serif font-bold text-white">
+                    The <span class="italic text-white/50">Archive</span>
+                </h2>
+                <button id="archive-toggle-btn" onclick="toggleArchive()" class="text-sm font-bold uppercase tracking-widest hover:text-primary transition-colors hover-trigger text-white/70">View All</button>
+            </div>
+
+            <div id="archive-grid" class="columns-2 md:columns-4 gap-4 space-y-4">
+                <!-- Using local paths with fallbacks -->
+                <div class="archive-item group hover-trigger" onclick="openModal('image', 'archive/ball_float.pngg', 'Sketch 01', 'Lighting')"><img src="archive/ball_float.png" class="rounded-lg w-full" onerror="this.src='https://images.unsplash.com/photo-1633613286991-611fe299c4be?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=60'"></div>
+                <div class="archive-item group hover-trigger" onclick="openModal('image', 'archive/hourglass.png', 'Sketch 02', 'Fluids')"><img src="archive/hourglass.png" class="rounded-lg w-full" onerror="this.src='https://images.unsplash.com/photo-1614850523060-8da1d56ae167?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=60'"></div>
+                <div class="archive-item group hover-trigger" onclick="openModal('image', 'modeling/abstract_geo.jpg', 'Sketch 03', 'Geo')"><img src="modeling/abstract_geo.jpg" class="rounded-lg w-full" onerror="this.src='https://images.unsplash.com/photo-1620641788421-7f1c91ade639?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=60'"></div>
+                <div class="archive-item group hover-trigger" onclick="openModal('image', 'modeling/lamp_sketch.jpg', 'Sketch 04', 'Hard Surface')"><img src="modeling/lamp_sketch.jpg" class="rounded-lg w-full" onerror="this.src='https://images.unsplash.com/photo-1518640467707-6811f4a6ab73?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=60'"></div>
+                
+                <div class="archive-item group archive-hidden hidden hover-trigger" onclick="openModal('image', 'interior/neon_street.jpg', 'Sketch 05', 'Neon')"><img src="interior/neon_street.jpg" class="rounded-lg w-full" onerror="this.src='https://images.unsplash.com/photo-1550684848-fac1c5b4e853?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=60'"></div>
+                <div class="archive-item group archive-hidden hidden hover-trigger" onclick="openModal('image', 'modeling/clay_render.jpg', 'Sketch 06', 'Clay')"><img src="modeling/clay_render.jpg" class="rounded-lg w-full" onerror="this.src='https://images.unsplash.com/photo-1617791160505-6f00504e3caf?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=60'"></div>
+                <div class="archive-item group archive-hidden hidden hover-trigger" onclick="openModal('image', 'modeling/texture_lab.jpg', 'Sketch 07', 'Materials')"><img src="modeling/texture_lab.jpg" class="rounded-lg w-full" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=60'"></div>
+                <div class="archive-item group archive-hidden hidden hover-trigger" onclick="openModal('image', 'modeling/wireframe.jpg', 'Wireframe', 'Topology')"><img src="modeling/wireframe.jpg" class="rounded-lg w-full" onerror="this.src='https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=60'"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trusted Partners -->
+    <section class="py-16 border-y border-white/5 bg-white/5">
+        <div class="max-w-7xl mx-auto px-6 text-center">
+            <p class="text-white/40 text-xs font-sans uppercase tracking-[0.3em] mb-12">Trusted Partners</p>
+            <div class="flex flex-wrap justify-center gap-12 md:gap-24 opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
+                <span class="text-xl font-serif italic text-white hover-trigger">Harmony School of Music</span>
+                <span class="text-xl font-serif italic text-white hover-trigger">HB Constructions</span>
+                <span class="text-xl font-serif italic text-white hover-trigger">Dr. Zamindars Eye Foundation</span>
+                <span class="text-xl font-serif italic text-white hover-trigger">Kara Cafe</span>
+                <span class="text-xl font-serif italic text-white hover-trigger">RS Groups</span>
+                <span class="text-xl font-serif italic text-white hover-trigger">XLR8 Sports</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Experience Timeline -->
+    <section id="experience" class="py-20 relative bg-black/10 backdrop-blur-sm">
+        <div class="max-w-7xl mx-auto px-6">
+            <h2 class="text-4xl md:text-6xl font-serif font-bold mb-12 text-center text-white">
+                My <span class="italic text-primary">Journey</span>
+            </h2>
+            
+            <div class="relative max-w-4xl mx-auto space-y-6">
+                <div class="absolute left-0 md:left-1/2 top-0 bottom-0 w-[1px] bg-white/20"></div>
+
+                <!-- Job 1 -->
+                <div class="relative mb-8 pl-8 md:pl-0">
+                    <div class="md:w-1/2 md:ml-auto md:pl-12 relative">
+                        <div class="absolute -left-[37px] md:-left-[53px] top-6 w-4 h-4 rounded-full bg-white border-4 border-primary z-10 box-content"></div>
+                        <div class="glass-card p-6 md:p-8 rounded-2xl hover:-translate-y-1 transition-transform duration-300 border-l-4 border-primary hover-trigger magnetic" data-strength="10">
+                            <span class="text-primary font-sans text-xs font-bold uppercase tracking-widest mb-2 block">Nov 2025 - Present</span>
+                            <h3 class="text-xl md:text-2xl font-serif text-white mb-1">Web Developer</h3>
+                            <p class="text-white/60 text-sm mb-2 italic font-serif">Harmony School of Music | Freelance</p>
+                            <p class="text-white/80 font-light text-sm leading-relaxed">Developing accessibility-focused web interfaces.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Job 2 -->
+                <div class="relative mb-8 pl-8 md:pl-0">
+                    <div class="md:w-1/2 md:mr-auto md:pr-12 md:text-right relative">
+                        <div class="absolute -left-[37px] md:left-auto md:-right-[53px] top-6 w-4 h-4 rounded-full bg-white border-4 border-white z-10 box-content"></div>
+                        <div class="glass-card p-6 md:p-8 rounded-2xl hover:-translate-y-1 transition-transform duration-300 border-l-4 border-white/20 hover-trigger magnetic" data-strength="10">
+                            <span class="text-white/50 font-sans text-xs font-bold uppercase tracking-widest mb-2 block">Oct 2025 - Nov 2025</span>
+                            <h3 class="text-xl md:text-2xl font-serif text-white mb-1">Web Developer</h3>
+                            <p class="text-white/60 text-sm mb-2 italic font-serif">Dr Zamindars Eye Foundation</p>
+                            <p class="text-white/80 font-light text-sm leading-relaxed">Transitioned project from HTML/PHP to WordPress for client ease.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Job 3 -->
+                <div class="relative mb-8 pl-8 md:pl-0">
+                    <div class="md:w-1/2 md:ml-auto md:pl-12 relative">
+                        <div class="absolute -left-[37px] md:-left-[53px] top-6 w-4 h-4 rounded-full bg-white border-4 border-secondary z-10 box-content"></div>
+                        <div class="glass-card p-6 md:p-8 rounded-2xl hover:-translate-y-1 transition-transform duration-300 border-l-4 border-secondary hover-trigger magnetic" data-strength="10">
+                            <span class="text-secondary font-sans text-xs font-bold uppercase tracking-widest mb-2 block">Sep 2024 - Oct 2024</span>
+                            <h3 class="text-xl md:text-2xl font-serif text-white mb-1">3D Modeler & Animator</h3>
+                            <p class="text-white/60 text-sm mb-2 italic font-serif">Kara Cafe | Bangalore</p>
+                            <p class="text-white/80 font-light text-sm leading-relaxed">Full-cycle commercial production from mesh to render.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Job 4 -->
+                <div class="relative mb-8 pl-8 md:pl-0">
+                    <div class="md:w-1/2 md:mr-auto md:pr-12 md:text-right relative">
+                        <div class="absolute -left-[37px] md:left-auto md:-right-[53px] top-6 w-4 h-4 rounded-full bg-white border-4 border-white z-10 box-content"></div>
+                        <div class="glass-card p-6 md:p-8 rounded-2xl hover:-translate-y-1 transition-transform duration-300 border-l-4 border-white/20 hover-trigger magnetic" data-strength="10">
+                            <span class="text-white/50 font-sans text-xs font-bold uppercase tracking-widest mb-2 block">Jun 2025 - Jul 2025</span>
+                            <h3 class="text-xl md:text-2xl font-serif text-white mb-1">Web Developer</h3>
+                            <p class="text-white/60 text-sm mb-2 italic font-serif">HB Constructions</p>
+                            <p class="text-white/80 font-light text-sm leading-relaxed">Optimized local SEO & Google Business Profile.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Job 5 -->
+                <div class="relative pl-8 md:pl-0">
+                    <div class="md:w-1/2 md:ml-auto md:pl-12 relative">
+                         <div class="absolute -left-[37px] md:-left-[53px] top-6 w-4 h-4 rounded-full bg-white border-4 border-white z-10 box-content"></div>
+                        <div class="glass-card p-6 md:p-8 rounded-2xl hover:-translate-y-1 transition-transform duration-300 border-l-4 border-white/20 hover-trigger magnetic" data-strength="10">
+                            <span class="text-white/50 font-sans text-xs font-bold uppercase tracking-widest mb-2 block">Jul 2024 - Sep 2024</span>
+                            <h3 class="text-xl md:text-2xl font-serif text-white mb-1">AutoCAD Designer</h3>
+                            <p class="text-white/60 text-sm mb-2 italic font-serif">RS Groups | Pileru</p>
+                            <p class="text-white/80 font-light text-sm leading-relaxed">Drafting precise architectural floor plans.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact -->
+    <section id="contact" class="py-32 relative">
+        <div class="max-w-4xl mx-auto px-6 text-center">
+            <div class="glass-card p-16 rounded-[3rem] relative overflow-hidden group">
+                <div class="absolute -top-20 -right-20 w-64 h-64 bg-primary/20 rounded-full blur-3xl group-hover:bg-primary/30 transition-colors duration-500"></div>
+                <div class="absolute -bottom-20 -left-20 w-64 h-64 bg-secondary/20 rounded-full blur-3xl group-hover:bg-secondary/30 transition-colors duration-500"></div>
+
+                <h2 class="text-5xl md:text-8xl font-serif font-bold text-white mb-8 relative z-10">
+                    Let's <span class="italic text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Talk</span>
+                </h2>
+                <p class="text-xl text-gray-300 mb-12 relative z-10">
+                    Open for commissions in Interior Visualization and Digital Product Design.
+                </p>
+                <div class="flex justify-center gap-6 relative z-10">
+                    <a href="mailto:nazimmohammed11@gmail.com" class="px-12 py-5 bg-white text-black rounded-full text-lg font-bold uppercase tracking-widest hover:scale-105 transition-transform hover-trigger">Email Me</a>
+                    <a href="tel:+966539633542" class="px-12 py-5 border border-white/30 text-white rounded-full font-bold uppercase tracking-widest hover:bg-white hover:text-black transition-all hover-trigger">Call Me</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="py-12 text-center border-t border-white/5 text-white/30 text-xs uppercase tracking-widest">
+        &copy; 2025 Nazim Mohammed. Riyadh, KSA.
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        const themes = {
+            all: { primary: '#22d3ee', secondary: '#f472b6', bg1: '#1e1b4b', bg2: '#4c1d95', bg3: '#be185d' },
+            interior: { primary: '#fb923c', secondary: '#facc15', bg1: '#431407', bg2: '#7c2d12', bg3: '#b45309' },
+            model: { primary: '#c084fc', secondary: '#3b82f6', bg1: '#172554', bg2: '#4c1d95', bg3: '#db2777' },
+            animation: { primary: '#a3e635', secondary: '#2dd4bf', bg1: '#022c22', bg2: '#064e3b', bg3: '#0f766e' }
+        };
+
+        function updateTheme(category, scroll = false) {
+            const t = themes[category] || themes.all;
+            const root = document.documentElement;
+            
+            root.style.setProperty('--color-primary', t.primary);
+            root.style.setProperty('--color-secondary', t.secondary);
+            
+            const bgLayer = document.getElementById('bg-layer');
+            bgLayer.style.opacity = 0;
+            setTimeout(() => {
+                bgLayer.style.background = `linear-gradient(135deg, ${t.bg1}, ${t.bg2}, ${t.bg3})`;
+                bgLayer.style.opacity = 1;
+            }, 300);
+
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                if(btn.getAttribute('data-filter') === category) {
+                    btn.classList.add('active');
+                    btn.style.borderColor = ''; 
+                    btn.style.background = '';
+                    btn.style.color = ''; 
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            document.querySelectorAll('.glass-card[data-category]').forEach(item => {
+                const visible = category === 'all' || item.dataset.category === category;
+                item.style.display = visible ? 'block' : 'none';
+                if(visible) gsap.fromTo(item, {opacity:0, y:50}, {opacity:1, y:0, duration:0.5});
+            });
+
+            update3DObjects(category, t);
+
+            if (scroll) {
+                const portfolioSection = document.getElementById('portfolio');
+                portfolioSection.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        const cursorDot = document.querySelector('.cursor-dot');
+        const cursorOutline = document.querySelector('.cursor-outline');
+
+        window.addEventListener('mousemove', (e) => {
+            cursorDot.style.left = `${e.clientX}px`;
+            cursorDot.style.top = `${e.clientY}px`;
+            
+            cursorOutline.animate({
+                left: `${e.clientX}px`,
+                top: `${e.clientY}px`
+            }, { duration: 500, fill: "forwards" });
+
+            if(typeof pointLight !== 'undefined') {
+                pointLight.position.x = (e.clientX / window.innerWidth) * 10 - 5;
+                pointLight.position.y = -(e.clientY / window.innerHeight) * 10 + 5;
+            }
+        });
+
+        document.querySelectorAll('.hover-trigger').forEach(el => {
+            el.addEventListener('mouseenter', () => {
+                document.body.classList.add('hovering');
+                gsap.to(cursorOutline, {scale: 1.5, duration: 0.3});
+            });
+            el.addEventListener('mouseleave', () => {
+                document.body.classList.remove('hovering');
+                gsap.to(cursorOutline, {scale: 1, duration: 0.3});
+            });
+        });
+
+        document.querySelectorAll('.magnetic').forEach(btn => {
+            btn.addEventListener('mousemove', (e) => {
+                const rect = btn.getBoundingClientRect();
+                const x = e.clientX - rect.left - rect.width / 2;
+                const y = e.clientY - rect.top - rect.height / 2;
+                gsap.to(btn, {x: x * 0.3, y: y * 0.3, duration: 0.3});
+            });
+            btn.addEventListener('mouseleave', () => {
+                gsap.to(btn, {x: 0, y: 0, duration: 0.3});
+            });
+        });
+
+        document.querySelectorAll('.tilt-card').forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const rotateX = ((y - centerY) / centerY) * -5;
+                const rotateY = ((x - centerX) / centerX) * 5;
+                
+                gsap.to(card, {
+                    rotationX: rotateX,
+                    rotationY: rotateY,
+                    transformPerspective: 1000,
+                    duration: 0.5
+                });
+            });
+            card.addEventListener('mouseleave', () => {
+                gsap.to(card, {rotationX: 0, rotationY: 0, duration: 0.5});
+            });
+        });
+
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.02);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const pointLight = new THREE.PointLight(0xffffff, 2, 50);
+        pointLight.position.set(0,0,5);
+        scene.add(pointLight);
+
+        const group = new THREE.Group();
+        scene.add(group);
+
+        const glassMat = new THREE.MeshPhysicalMaterial({
+            color: 0xffffff, metalness: 0.1, roughness: 0.1, transmission: 0.9, thickness: 1.5, transparent: true, opacity: 0.8
+        });
+        const matteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+
+        const sphere = new THREE.Mesh(new THREE.IcosahedronGeometry(2, 1), glassMat);
+        sphere.position.set(5, 2, -5);
+        group.add(sphere);
+
+        const cube = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), matteMat);
+        cube.position.set(-5, -2, -8);
+        cube.rotation.set(0.5, 0.5, 0);
+        group.add(cube);
+
+        const torus = new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3, 100, 16), new THREE.MeshStandardMaterial({color: 0xf472b6}));
+        torus.position.set(6, -4, -10);
+        group.add(torus);
+
+        const partGeo = new THREE.BufferGeometry();
+        const pos = new Float32Array(1500);
+        for(let i=0; i<1500; i++) pos[i] = (Math.random()-0.5)*30;
+        partGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const particles = new THREE.Points(partGeo, new THREE.PointsMaterial({size: 0.05, color: 0xffffff, transparent: true, opacity: 0.5}));
+        scene.add(particles);
+
+        camera.position.z = 8;
+
+        const clock = new THREE.Clock();
+        function animate() {
+            const t = clock.getElapsedTime();
+            sphere.rotation.y = t * 0.2;
+            cube.rotation.x = t * 0.3;
+            torus.rotation.z = t * 0.4;
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        function update3DObjects(cat, t) {
+            gsap.to(torus.material.color, {r: new THREE.Color(t.secondary).r, g: new THREE.Color(t.secondary).g, b: new THREE.Color(t.secondary).b});
+            gsap.to(pointLight.color, {r: new THREE.Color(t.primary).r, g: new THREE.Color(t.primary).g, b: new THREE.Color(t.primary).b});
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // SAFETY: Force loader removal
+        window.addEventListener('load', () => {
+            const loader = document.getElementById('loader');
+            if(loader) {
+                gsap.to(loader, {opacity: 0, duration: 1, onComplete: () => loader.remove()});
+                
+                gsap.utils.toArray('.reveal-text span').forEach(span => {
+                    gsap.to(span, {y: 0, duration: 1.5, ease: 'power4.out', scrollTrigger: span});
+                });
+            }
+        });
+        
+        // Failsafe: Remove loader after 3 seconds even if load event hangs
+        setTimeout(() => {
+            const loader = document.getElementById('loader');
+            if(loader) loader.remove();
+        }, 3000);
+
+        document.getElementById('mobile-menu-btn').addEventListener('click', () => {
+            document.getElementById('mobile-menu').classList.toggle('hidden');
+        });
+
+        function toggleArchive() {
+            const hidden = document.querySelectorAll('.archive-hidden');
+            const btn = document.getElementById('archive-toggle-btn');
+            hidden.forEach(el => el.classList.toggle('hidden'));
+            btn.innerText = btn.innerText.includes('VIEW') ? 'Collapse Archive' : 'View All';
+        }
+
+        const modal = document.getElementById('media-modal');
+        const mContainer = document.getElementById('modal-container');
+        
+        // Updated modal logic to fix sizing and close behavior
+        function openModal(type, src, title, desc) {
+            mContainer.innerHTML = ''; // Clear previous
+            
+            if (type === 'video') {
+                const video = document.createElement('video');
+                video.src = src;
+                video.controls = true;
+                video.autoplay = true;
+                // Classes to constrain video size properly
+                video.classList.add('max-w-[95vw]', 'max-h-[85vh]', 'rounded-lg', 'shadow-2xl');
+                mContainer.appendChild(video);
+            } else {
+                const img = document.createElement('img');
+                img.src = src;
+                // Classes to constrain image size properly without forcing width
+                img.classList.add('max-w-[95vw]', 'max-h-[85vh]', 'w-auto', 'h-auto', 'object-contain', 'rounded-lg', 'shadow-2xl');
+                mContainer.appendChild(img);
+            }
+
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-desc').innerText = desc;
+            modal.classList.add('open');
+            gsap.fromTo(mContainer, {scale: 0.8, opacity: 0}, {scale: 1, opacity: 1, duration: 0.3, ease: 'back.out(1.7)'});
+        }
+
+        function closeModal() {
+            gsap.to(mContainer, {scale: 0.8, opacity: 0, duration: 0.2, onComplete: () => {
+                modal.classList.remove('open');
+                mContainer.innerHTML = '';
+            }});
+        }
+
+        // Close on clicking outside the content (on the background overlay)
+        modal.addEventListener('click', (e) => {
+            // If the click target is NOT inside the modal container, close it
+            if (!mContainer.contains(e.target)) {
+                closeModal();
+            }
+        });
+
+    </script>
+</body>
+</html>
